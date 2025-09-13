@@ -19,6 +19,7 @@ export default function TwoAxisViewer({
   const [lastMoveDir, setLastMoveDir] = useState("x");
   const [resolvedVBase, setResolvedVBase] = useState(vCandidates[0]);
   const [showHint, setShowHint] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
 
   const containerRef = useRef(null);
   const draggingRef = useRef(false);
@@ -26,6 +27,11 @@ export default function TwoAxisViewer({
   const accY = useRef(0);
   const lastPointer = useRef({ x: 0, y: 0 });
   const scrollInterval = useRef(null);
+
+  // Detect mobile
+  useEffect(() => {
+    setIsMobile(window.innerWidth < 768);
+  }, []);
 
   // Detect vertical base
   useEffect(() => {
@@ -62,7 +68,7 @@ export default function TwoAxisViewer({
       : preloadNextFrames("vertical", resolvedVBase, vIndex, verticalCount);
   }, [hIndex, vIndex, lastMoveDir, hBase, resolvedVBase]);
 
-  // Pointer & drag
+  // Pointer drag
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -72,6 +78,7 @@ export default function TwoAxisViewer({
       el.style.cursor = "grabbing";
       lastPointer.current = { x: e.clientX, y: e.clientY };
       try { el.setPointerCapture(e.pointerId); } catch {}
+      stopScrolling();
     };
     const onPointerMove = (e) => {
       if (!draggingRef.current) return;
@@ -97,7 +104,6 @@ export default function TwoAxisViewer({
 
       lastPointer.current = { x: e.clientX, y: e.clientY };
       setShowHint(false);
-      stopScrolling(); // stop arrow scroll on drag
     };
     const onPointerUp = () => {
       draggingRef.current = false;
@@ -109,7 +115,6 @@ export default function TwoAxisViewer({
     el.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
-
     return () => {
       el.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
@@ -127,9 +132,9 @@ export default function TwoAxisViewer({
   }, [horizontalCount, verticalCount]);
   useEffect(() => { window.addEventListener("keydown", handleKey); return () => window.removeEventListener("keydown", handleKey); }, [handleKey]);
 
-  // Arrow scrolling
+  // Scroll buttons logic
   const startScrolling = (dir) => {
-    stopScrolling(); // stop previous
+    stopScrolling();
     scrollInterval.current = setInterval(() => {
       if (dir === "left") { setHIndex((prev) => (prev - 1 + horizontalCount) % horizontalCount); setLastMoveDir("x"); }
       else if (dir === "right") { setHIndex((prev) => (prev + 1) % horizontalCount); setLastMoveDir("x"); }
@@ -138,17 +143,20 @@ export default function TwoAxisViewer({
       setShowHint(false);
     }, 30);
   };
-  const stopScrolling = () => { if (scrollInterval.current) clearInterval(scrollInterval.current); scrollInterval.current = null; };
+  const stopScrolling = () => {
+    if (scrollInterval.current) clearInterval(scrollInterval.current);
+    scrollInterval.current = null;
+  };
 
   const hPath = (i) => `/images/horizontal/${hBase}${pad(i)}.${fileExt}`;
   const vPath = (i) => `/images/vertical/${resolvedVBase}${pad(i)}.${fileExt}`;
   const currentSrc = lastMoveDir === "x" ? hPath(hIndex) : vPath(vIndex);
 
   const arrowStyle = (dir) => {
-    const baseSize = window.innerWidth < 768 ? 50 : 32;
+    const size = isMobile ? 50 : 32;
     return {
       position: "absolute",
-      fontSize: baseSize,
+      fontSize: size,
       padding: "10px",
       color: "#fff",
       background: "rgba(0,0,0,0.4)",
@@ -183,8 +191,7 @@ export default function TwoAxisViewer({
         position: "relative",
         cursor: "grab",
       }}
-      tabIndex={0}
-      onClick={stopScrolling} // stop scroll if anywhere clicked
+      onClick={stopScrolling}
       onTouchStart={stopScrolling}
     >
       <img
@@ -200,14 +207,30 @@ export default function TwoAxisViewer({
         draggable={false}
       />
 
-      {showHint && <div style={{
-        position: "absolute", inset: 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 40, color: "rgba(0,0,0,0.5)", pointerEvents: "none"
-      }}>⬅️ ➡️ ⬆️ ⬇️</div>}
+      {showHint && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 40,
+            color: "rgba(0,0,0,0.5)",
+            pointerEvents: "none",
+          }}
+        >
+          ⬅️ ➡️ ⬆️ ⬇️
+        </div>
+      )}
 
       {["left","right","up","down"].map(dir => (
-        <button key={dir} onMouseDown={() => startScrolling(dir)} style={arrowStyle(dir)}>
+        <button
+          key={dir}
+          onMouseDown={(e) => { e.stopPropagation(); startScrolling(dir); }}
+          onTouchStart={(e) => { e.stopPropagation(); startScrolling(dir); }}
+          style={arrowStyle(dir)}
+        >
           {dir === "left" ? "←" : dir === "right" ? "→" : dir === "up" ? "↑" : "↓"}
         </button>
       ))}
