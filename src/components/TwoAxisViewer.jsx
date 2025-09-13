@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 
 function pad(n, len = 5) {
   return String(n).padStart(len, "0");
@@ -27,7 +27,7 @@ export default function TwoAxisViewer({
   const accY = useRef(0);
   const lastPointer = useRef({ x: 0, y: 0 });
 
-  // detect vertical base
+  // detect vertical base (Vertical vs Verital)
   useEffect(() => {
     let mounted = true;
     const tryOne = (base, cb) => {
@@ -47,14 +47,18 @@ export default function TwoAxisViewer({
       }
     });
 
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [vCandidates, fileExt]);
 
   // preload current frame
   useEffect(() => {
     const img = new Image();
-    img.src = lastMoveDir === "x" ? `/images/horizontal/${hBase}${pad(hIndex)}.${fileExt}` 
-                                  : `/images/vertical/${resolvedVBase}${pad(vIndex)}.${fileExt}`;
+    img.src =
+      lastMoveDir === "x"
+        ? `/images/horizontal/${hBase}${pad(hIndex)}.${fileExt}`
+        : `/images/vertical/${resolvedVBase}${pad(vIndex)}.${fileExt}`;
   }, [hIndex, vIndex, lastMoveDir, resolvedVBase, hBase, fileExt]);
 
   // pointer handlers
@@ -64,8 +68,11 @@ export default function TwoAxisViewer({
 
     const onPointerDown = (e) => {
       draggingRef.current = true;
+      el.style.cursor = "grabbing";
       lastPointer.current = { x: e.clientX, y: e.clientY };
-      try { el.setPointerCapture(e.pointerId); } catch {}
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {}
     };
 
     const onPointerMove = (e) => {
@@ -78,7 +85,9 @@ export default function TwoAxisViewer({
       if (Math.abs(accX.current) >= sensitivity) {
         const steps = Math.floor(Math.abs(accX.current) / sensitivity);
         const dir = accX.current > 0 ? 1 : -1;
-        setHIndex((prev) => (prev + dir * steps + horizontalCount) % horizontalCount);
+        setHIndex(
+          (prev) => (prev + dir * steps + horizontalCount) % horizontalCount
+        );
         accX.current -= steps * sensitivity * dir;
         setLastMoveDir("x");
       }
@@ -86,20 +95,25 @@ export default function TwoAxisViewer({
       if (Math.abs(accY.current) >= sensitivity) {
         const stepsY = Math.floor(Math.abs(accY.current) / sensitivity);
         const dirY = accY.current > 0 ? 1 : -1;
-        setVIndex((prev) => (prev + dirY * stepsY + verticalCount) % verticalCount);
+        setVIndex(
+          (prev) => (prev + dirY * stepsY + verticalCount) % verticalCount
+        );
         accY.current -= stepsY * sensitivity * dirY;
         setLastMoveDir("y");
       }
 
       lastPointer.current = { x: e.clientX, y: e.clientY };
-      setShowHint(false); // hide hint when user interacts
+      setShowHint(false); // hide arrows after first drag
     };
 
     const onPointerUp = (e) => {
       draggingRef.current = false;
       accX.current = 0;
       accY.current = 0;
-      try { el.releasePointerCapture(e.pointerId); } catch {}
+      el.style.cursor = "grab";
+      try {
+        el.releasePointerCapture(e.pointerId);
+      } catch {}
     };
 
     el.addEventListener("pointerdown", onPointerDown);
@@ -113,14 +127,15 @@ export default function TwoAxisViewer({
     };
   }, [horizontalCount, verticalCount, sensitivity, resolvedVBase]);
 
-  // keyboard navigation
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.key === "ArrowLeft") {
-        setHIndex((prev) => (prev - 1 + horizontalCount) % horizontalCount);
-        setLastMoveDir("x");
-      } else if (e.key === "ArrowRight") {
+  // keyboard support
+  const handleKey = useCallback(
+    (e) => {
+      setShowHint(false);
+      if (e.key === "ArrowRight") {
         setHIndex((prev) => (prev + 1) % horizontalCount);
+        setLastMoveDir("x");
+      } else if (e.key === "ArrowLeft") {
+        setHIndex((prev) => (prev - 1 + horizontalCount) % horizontalCount);
         setLastMoveDir("x");
       } else if (e.key === "ArrowUp") {
         setVIndex((prev) => (prev - 1 + verticalCount) % verticalCount);
@@ -129,22 +144,23 @@ export default function TwoAxisViewer({
         setVIndex((prev) => (prev + 1) % verticalCount);
         setLastMoveDir("y");
       }
-    };
+    },
+    [horizontalCount, verticalCount]
+  );
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [horizontalCount, verticalCount]);
+  useEffect(() => {
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [handleKey]);
 
-  // auto-move on load
+  // auto-move once on load
   useEffect(() => {
     const timer = setTimeout(() => {
-      setHIndex(5); // small horizontal move
-      setVIndex(5); // small vertical move
+      setHIndex((prev) => (prev + 5) % horizontalCount);
+      setVIndex((prev) => (prev + 5) % verticalCount);
     }, 500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [horizontalCount, verticalCount]);
 
   const hPath = (i) => `/images/horizontal/${hBase}${pad(i)}.${fileExt}`;
   const vPath = (i) => `/images/vertical/${resolvedVBase}${pad(i)}.${fileExt}`;
@@ -165,8 +181,9 @@ export default function TwoAxisViewer({
         background: "#f8f8f8",
         overflow: "hidden",
         position: "relative",
-        cursor: "grab", // show "grab" cursor for draggable
+        cursor: "grab",
       }}
+      tabIndex={0} // 👈 keyboard ke liye focusable
     >
       <img
         src={currentSrc}
@@ -181,22 +198,21 @@ export default function TwoAxisViewer({
         draggable={false}
       />
 
-      {/* Instruction hint */}
+      {/* Hint Overlay Arrows (only once) */}
       {showHint && (
-        <div style={{
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          fontSize: 24,
-          color: "#555",
-          userSelect: "none",
-          fontWeight: "bold",
-          background: "rgba(255, 255, 255, 0.7)",
-          padding: "10px",
-          borderRadius: "5px",
-        }}>
-          Drag to Navigate or Use Arrow Keys
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 40,
+            color: "rgba(0,0,0,0.5)",
+            pointerEvents: "none",
+          }}
+        >
+          ⬅️ ➡️ ⬆️ ⬇️
         </div>
       )}
     </div>
