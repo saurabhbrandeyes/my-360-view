@@ -19,6 +19,8 @@ export default function TwoAxisViewer({
   const [resolvedVBase, setResolvedVBase] = useState(vCandidates[0]);
   const [showHint, setShowHint] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [activeArrow, setActiveArrow] = useState(null); // currently moving arrow
+
   const scrollInterval = useRef(null);
 
   // Detect mobile
@@ -61,7 +63,7 @@ export default function TwoAxisViewer({
       : preloadNextFrames("vertical", resolvedVBase, vIndex, verticalCount);
   }, [hIndex, vIndex, lastMoveDir, hBase, resolvedVBase]);
 
-  // Keyboard support (optional, can remove if only arrow buttons)
+  // Keyboard support (optional)
   const handleKey = useCallback((e) => {
     setShowHint(false);
     if (e.key === "ArrowRight") { setHIndex((prev) => (prev + 1) % horizontalCount); setLastMoveDir("x"); }
@@ -74,6 +76,7 @@ export default function TwoAxisViewer({
   // Scroll buttons logic
   const startScrolling = (dir) => {
     stopScrolling();
+    setActiveArrow(dir); // set the moving arrow
     scrollInterval.current = setInterval(() => {
       if (dir === "left") { setHIndex((prev) => (prev - 1 + horizontalCount) % horizontalCount); setLastMoveDir("x"); }
       else if (dir === "right") { setHIndex((prev) => (prev + 1) % horizontalCount); setLastMoveDir("x"); }
@@ -82,9 +85,11 @@ export default function TwoAxisViewer({
       setShowHint(false);
     }, 30);
   };
+
   const stopScrolling = () => {
     if (scrollInterval.current) clearInterval(scrollInterval.current);
     scrollInterval.current = null;
+    setActiveArrow(null); // reset active arrow
   };
 
   const hPath = (i) => `/images/horizontal/${hBase}${pad(i)}.${fileExt}`;
@@ -112,6 +117,7 @@ export default function TwoAxisViewer({
       left: dir === "left" ? 10 : dir === "right" ? "auto" : "50%",
       right: dir === "right" ? 10 : "auto",
       transform: "none",
+      display: activeArrow && activeArrow !== dir ? "none" : "block", // only show active arrow
     };
   };
 
@@ -121,7 +127,7 @@ export default function TwoAxisViewer({
         width: "100%",
         maxWidth: width,
         aspectRatio: "1/1",
-        border: "1px solid #ddd",
+        border: activeArrow ? "none" : "1px solid #ddd", // hide border while moving
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -139,8 +145,10 @@ export default function TwoAxisViewer({
           maxWidth: "100%",
           maxHeight: "100%",
           objectFit: "contain",
-          pointerEvents: "none", // disables pointer events on image
+          pointerEvents: "none",
           userSelect: "none",
+          transform: activeArrow && isMobile ? "scale(1.1)" : "scale(1)", // zoom slightly on mobile when moving
+          transition: "transform 0.2s ease",
         }}
         draggable={false}
       />
