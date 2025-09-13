@@ -165,6 +165,9 @@ export default function TwoAxisViewer({
       cursor: "pointer",
       zIndex: 10,
       userSelect: "none",
+      WebkitUserSelect: "none",
+      touchAction: "none",
+      WebkitTapHighlightColor: "transparent",
       top: dir === "up" ? 10 : dir === "down" ? "auto" : "50%",
       bottom: dir === "down" ? 10 : "auto",
       left: dir === "left" ? 10 : dir === "right" ? "auto" : "50%",
@@ -228,7 +231,7 @@ export default function TwoAxisViewer({
         <button
           key={dir}
           onMouseDown={(e) => { e.stopPropagation(); startScrolling(dir); }}
-          onTouchStart={(e) => { e.stopPropagation(); startScrolling(dir); }}
+          onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); startScrolling(dir); }}
           style={arrowStyle(dir)}
         >
           {dir === "left" ? "←" : dir === "right" ? "→" : dir === "up" ? "↑" : "↓"}
