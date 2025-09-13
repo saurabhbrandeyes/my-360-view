@@ -1,5 +1,10 @@
 "use client";
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 
 function pad(n, len = 5) {
   return String(n).padStart(len, "0");
@@ -26,6 +31,8 @@ export default function TwoAxisViewer({
   const accX = useRef(0);
   const accY = useRef(0);
   const lastPointer = useRef({ x: 0, y: 0 });
+
+  const scrollIntervals = useRef({});
 
   // detect vertical base (Vertical vs Verital)
   useEffect(() => {
@@ -84,7 +91,7 @@ export default function TwoAxisViewer({
 
       if (Math.abs(accX.current) >= sensitivity) {
         const steps = Math.floor(Math.abs(accX.current) / sensitivity);
-        const dir = accX.current > 0 ? 1 : -1;
+        const dir = accX.current > 0 ? -1 : 1;
         setHIndex(
           (prev) => (prev + dir * steps + horizontalCount) % horizontalCount
         );
@@ -94,7 +101,7 @@ export default function TwoAxisViewer({
 
       if (Math.abs(accY.current) >= sensitivity) {
         const stepsY = Math.floor(Math.abs(accY.current) / sensitivity);
-        const dirY = accY.current > 0 ? 1 : -1;
+        const dirY = accY.current > 0 ? -1 : 1;
         setVIndex(
           (prev) => (prev + dirY * stepsY + verticalCount) % verticalCount
         );
@@ -162,6 +169,37 @@ export default function TwoAxisViewer({
     return () => clearTimeout(timer);
   }, [horizontalCount, verticalCount]);
 
+  // scroll control handlers
+  const startScrolling = (dir) => {
+    const step = 1;
+    const interval = 30;
+
+    const fnMap = {
+      left: () => {
+        setHIndex((prev) => (prev - step + horizontalCount) % horizontalCount);
+        setLastMoveDir("x");
+      },
+      right: () => {
+        setHIndex((prev) => (prev + step) % horizontalCount);
+        setLastMoveDir("x");
+      },
+      up: () => {
+        setVIndex((prev) => (prev - step + verticalCount) % verticalCount);
+        setLastMoveDir("y");
+      },
+      down: () => {
+        setVIndex((prev) => (prev + step) % verticalCount);
+        setLastMoveDir("y");
+      },
+    };
+
+    scrollIntervals.current[dir] = setInterval(fnMap[dir], interval);
+  };
+
+  const stopScrolling = (dir) => {
+    clearInterval(scrollIntervals.current[dir]);
+  };
+
   const hPath = (i) => `/images/horizontal/${hBase}${pad(i)}.${fileExt}`;
   const vPath = (i) => `/images/vertical/${resolvedVBase}${pad(i)}.${fileExt}`;
   const currentSrc = lastMoveDir === "x" ? hPath(hIndex) : vPath(vIndex);
@@ -183,7 +221,7 @@ export default function TwoAxisViewer({
         position: "relative",
         cursor: "grab",
       }}
-      tabIndex={0} // 👈 keyboard ke liye focusable
+      tabIndex={0}
     >
       <img
         src={currentSrc}
@@ -198,7 +236,7 @@ export default function TwoAxisViewer({
         draggable={false}
       />
 
-      {/* Hint Overlay Arrows (only once) */}
+      {/* Hint Overlay */}
       {showHint && (
         <div
           style={{
@@ -215,6 +253,54 @@ export default function TwoAxisViewer({
           ⬅️ ➡️ ⬆️ ⬇️
         </div>
       )}
+
+      {/* Scroll Buttons */}
+      {["left", "right", "up", "down"].map((dir) => (
+        <button
+          key={dir}
+          onMouseDown={() => {
+            setShowHint(false);
+            startScrolling(dir);
+          }}
+          onMouseUp={() => stopScrolling(dir)}
+          onMouseLeave={() => stopScrolling(dir)}
+          style={{
+            position: "absolute",
+            [dir === "left"
+              ? "left"
+              : dir === "right"
+              ? "right"
+              : "50%"]: 10,
+            top:
+              dir === "up"
+                ? 10
+                : dir === "down"
+                ? "auto"
+                : "calc(50% - 20px)",
+            bottom: dir === "down" ? 10 : "auto",
+            transform:
+              dir === "up" || dir === "down"
+                ? "translateX(-50%)"
+                : "none",
+            fontSize: 24,
+            padding: "10px 15px",
+            background: "#fff",
+            border: "1px solid #ccc",
+            borderRadius: 5,
+            cursor: "pointer",
+            zIndex: 10,
+            userSelect: "none",
+          }}
+        >
+          {dir === "left"
+            ? "←"
+            : dir === "right"
+            ? "→"
+            : dir === "up"
+            ? "↑"
+            : "↓"}
+        </button>
+      ))}
     </div>
   );
 }
