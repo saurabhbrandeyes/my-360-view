@@ -11,7 +11,6 @@ export default function TwoAxisViewer({
   hBase = "Watch-Horizontal.",
   vCandidates = ["Watch-Vertical.", "Watch-Verital."],
   fileExt = "png",
-  sensitivity = 6,
   width = 600,
 }) {
   const [hIndex, setHIndex] = useState(0);
@@ -20,12 +19,6 @@ export default function TwoAxisViewer({
   const [resolvedVBase, setResolvedVBase] = useState(vCandidates[0]);
   const [showHint, setShowHint] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
-
-  const containerRef = useRef(null);
-  const draggingRef = useRef(false);
-  const accX = useRef(0);
-  const accY = useRef(0);
-  const lastPointer = useRef({ x: 0, y: 0 });
   const scrollInterval = useRef(null);
 
   // Detect mobile
@@ -68,61 +61,7 @@ export default function TwoAxisViewer({
       : preloadNextFrames("vertical", resolvedVBase, vIndex, verticalCount);
   }, [hIndex, vIndex, lastMoveDir, hBase, resolvedVBase]);
 
-  // Pointer drag
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const onPointerDown = (e) => {
-      draggingRef.current = true;
-      el.style.cursor = "grabbing";
-      lastPointer.current = { x: e.clientX, y: e.clientY };
-      try { el.setPointerCapture(e.pointerId); } catch {}
-      stopScrolling();
-    };
-    const onPointerMove = (e) => {
-      if (!draggingRef.current) return;
-      const dx = e.clientX - lastPointer.current.x;
-      const dy = e.clientY - lastPointer.current.y;
-      accX.current += dx;
-      accY.current += dy;
-
-      if (Math.abs(accX.current) >= sensitivity) {
-        const steps = Math.floor(Math.abs(accX.current) / sensitivity);
-        const dir = accX.current > 0 ? -1 : 1;
-        setHIndex((prev) => (prev + dir * steps + horizontalCount) % horizontalCount);
-        accX.current -= steps * sensitivity * dir;
-        setLastMoveDir("x");
-      }
-      if (Math.abs(accY.current) >= sensitivity) {
-        const steps = Math.floor(Math.abs(accY.current) / sensitivity);
-        const dir = accY.current > 0 ? -1 : 1;
-        setVIndex((prev) => (prev + dir * steps + verticalCount) % verticalCount);
-        accY.current -= steps * sensitivity * dir;
-        setLastMoveDir("y");
-      }
-
-      lastPointer.current = { x: e.clientX, y: e.clientY };
-      setShowHint(false);
-    };
-    const onPointerUp = () => {
-      draggingRef.current = false;
-      accX.current = 0;
-      accY.current = 0;
-      el.style.cursor = "grab";
-    };
-
-    el.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-    return () => {
-      el.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-    };
-  }, [horizontalCount, verticalCount, sensitivity]);
-
-  // Keyboard
+  // Keyboard support (optional, can remove if only arrow buttons)
   const handleKey = useCallback((e) => {
     setShowHint(false);
     if (e.key === "ArrowRight") { setHIndex((prev) => (prev + 1) % horizontalCount); setLastMoveDir("x"); }
@@ -178,21 +117,17 @@ export default function TwoAxisViewer({
 
   return (
     <div
-      ref={containerRef}
       style={{
         width: "100%",
         maxWidth: width,
         aspectRatio: "1/1",
         border: "1px solid #ddd",
-        touchAction: "none",
-        userSelect: "none",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         background: "#f8f8f8",
         overflow: "hidden",
         position: "relative",
-        cursor: "grab",
       }}
       onClick={stopScrolling}
       onTouchStart={stopScrolling}
@@ -204,7 +139,7 @@ export default function TwoAxisViewer({
           maxWidth: "100%",
           maxHeight: "100%",
           objectFit: "contain",
-          pointerEvents: "none",
+          pointerEvents: "none", // disables pointer events on image
           userSelect: "none",
         }}
         draggable={false}
