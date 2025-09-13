@@ -1,10 +1,5 @@
 "use client";
-import React, {
-  useEffect,
-  useRef,
-  useState,
-  useCallback,
-} from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 
 function pad(n, len = 5) {
   return String(n).padStart(len, "0");
@@ -18,7 +13,6 @@ export default function TwoAxisViewer({
   fileExt = "png",
   sensitivity = 6,
   width = 600,
-  height = 600,
 }) {
   const [hIndex, setHIndex] = useState(0);
   const [vIndex, setVIndex] = useState(0);
@@ -31,10 +25,9 @@ export default function TwoAxisViewer({
   const accX = useRef(0);
   const accY = useRef(0);
   const lastPointer = useRef({ x: 0, y: 0 });
+  const scrollInterval = useRef(null);
 
-  const scrollIntervals = useRef({});
-
-  // detect vertical base (Vertical vs Verital)
+  // Detect vertical base
   useEffect(() => {
     let mounted = true;
     const tryOne = (base, cb) => {
@@ -43,7 +36,6 @@ export default function TwoAxisViewer({
       img.onerror = () => mounted && cb(false);
       img.src = `/images/vertical/${base}${pad(0)}.${fileExt}`;
     };
-
     tryOne(vCandidates[0], (ok) => {
       if (ok) setResolvedVBase(vCandidates[0]);
       else if (vCandidates[1]) {
@@ -53,22 +45,24 @@ export default function TwoAxisViewer({
         });
       }
     });
-
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [vCandidates, fileExt]);
 
-  // preload current frame
+  // Preload frames
+  const preloadNextFrames = (direction, base, index, count) => {
+    for (let i = 1; i <= 2; i++) {
+      const idx = (index + i) % count;
+      const img = new Image();
+      img.src = `/images/${direction}/${base}${pad(idx)}.${fileExt}`;
+    }
+  };
   useEffect(() => {
-    const img = new Image();
-    img.src =
-      lastMoveDir === "x"
-        ? `/images/horizontal/${hBase}${pad(hIndex)}.${fileExt}`
-        : `/images/vertical/${resolvedVBase}${pad(vIndex)}.${fileExt}`;
-  }, [hIndex, vIndex, lastMoveDir, resolvedVBase, hBase, fileExt]);
+    lastMoveDir === "x"
+      ? preloadNextFrames("horizontal", hBase, hIndex, horizontalCount)
+      : preloadNextFrames("vertical", resolvedVBase, vIndex, verticalCount);
+  }, [hIndex, vIndex, lastMoveDir, hBase, resolvedVBase]);
 
-  // pointer handlers
+  // Pointer drag
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -77,11 +71,9 @@ export default function TwoAxisViewer({
       draggingRef.current = true;
       el.style.cursor = "grabbing";
       lastPointer.current = { x: e.clientX, y: e.clientY };
-      try {
-        el.setPointerCapture(e.pointerId);
-      } catch {}
+      try { el.setPointerCapture(e.pointerId); } catch {}
+      stopScrolling();
     };
-
     const onPointerMove = (e) => {
       if (!draggingRef.current) return;
       const dx = e.clientX - lastPointer.current.x;
@@ -92,124 +84,97 @@ export default function TwoAxisViewer({
       if (Math.abs(accX.current) >= sensitivity) {
         const steps = Math.floor(Math.abs(accX.current) / sensitivity);
         const dir = accX.current > 0 ? -1 : 1;
-        setHIndex(
-          (prev) => (prev + dir * steps + horizontalCount) % horizontalCount
-        );
+        setHIndex((prev) => (prev + dir * steps + horizontalCount) % horizontalCount);
         accX.current -= steps * sensitivity * dir;
         setLastMoveDir("x");
       }
-
       if (Math.abs(accY.current) >= sensitivity) {
-        const stepsY = Math.floor(Math.abs(accY.current) / sensitivity);
-        const dirY = accY.current > 0 ? -1 : 1;
-        setVIndex(
-          (prev) => (prev + dirY * stepsY + verticalCount) % verticalCount
-        );
-        accY.current -= stepsY * sensitivity * dirY;
+        const steps = Math.floor(Math.abs(accY.current) / sensitivity);
+        const dir = accY.current > 0 ? -1 : 1;
+        setVIndex((prev) => (prev + dir * steps + verticalCount) % verticalCount);
+        accY.current -= steps * sensitivity * dir;
         setLastMoveDir("y");
       }
 
       lastPointer.current = { x: e.clientX, y: e.clientY };
-      setShowHint(false); // hide arrows after first drag
+      setShowHint(false);
     };
-
-    const onPointerUp = (e) => {
+    const onPointerUp = () => {
       draggingRef.current = false;
       accX.current = 0;
       accY.current = 0;
       el.style.cursor = "grab";
-      try {
-        el.releasePointerCapture(e.pointerId);
-      } catch {}
     };
 
     el.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
-
     return () => {
       el.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
-  }, [horizontalCount, verticalCount, sensitivity, resolvedVBase]);
+  }, [horizontalCount, verticalCount, sensitivity]);
 
-  // keyboard support
-  const handleKey = useCallback(
-    (e) => {
-      setShowHint(false);
-      if (e.key === "ArrowRight") {
-        setHIndex((prev) => (prev + 1) % horizontalCount);
-        setLastMoveDir("x");
-      } else if (e.key === "ArrowLeft") {
-        setHIndex((prev) => (prev - 1 + horizontalCount) % horizontalCount);
-        setLastMoveDir("x");
-      } else if (e.key === "ArrowUp") {
-        setVIndex((prev) => (prev - 1 + verticalCount) % verticalCount);
-        setLastMoveDir("y");
-      } else if (e.key === "ArrowDown") {
-        setVIndex((prev) => (prev + 1) % verticalCount);
-        setLastMoveDir("y");
-      }
-    },
-    [horizontalCount, verticalCount]
-  );
-
-  useEffect(() => {
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [handleKey]);
-
-  // auto-move once on load
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setHIndex((prev) => (prev + 5) % horizontalCount);
-      setVIndex((prev) => (prev + 5) % verticalCount);
-    }, 500);
-    return () => clearTimeout(timer);
+  // Keyboard
+  const handleKey = useCallback((e) => {
+    setShowHint(false);
+    if (e.key === "ArrowRight") { setHIndex((prev) => (prev + 1) % horizontalCount); setLastMoveDir("x"); }
+    else if (e.key === "ArrowLeft") { setHIndex((prev) => (prev - 1 + horizontalCount) % horizontalCount); setLastMoveDir("x"); }
+    else if (e.key === "ArrowUp") { setVIndex((prev) => (prev - 1 + verticalCount) % verticalCount); setLastMoveDir("y"); }
+    else if (e.key === "ArrowDown") { setVIndex((prev) => (prev + 1) % verticalCount); setLastMoveDir("y"); }
   }, [horizontalCount, verticalCount]);
+  useEffect(() => { window.addEventListener("keydown", handleKey); return () => window.removeEventListener("keydown", handleKey); }, [handleKey]);
 
-  // scroll control handlers
+  // Scroll buttons logic
   const startScrolling = (dir) => {
-    const step = 1;
-    const interval = 30;
-
-    const fnMap = {
-      left: () => {
-        setHIndex((prev) => (prev - step + horizontalCount) % horizontalCount);
-        setLastMoveDir("x");
-      },
-      right: () => {
-        setHIndex((prev) => (prev + step) % horizontalCount);
-        setLastMoveDir("x");
-      },
-      up: () => {
-        setVIndex((prev) => (prev - step + verticalCount) % verticalCount);
-        setLastMoveDir("y");
-      },
-      down: () => {
-        setVIndex((prev) => (prev + step) % verticalCount);
-        setLastMoveDir("y");
-      },
-    };
-
-    scrollIntervals.current[dir] = setInterval(fnMap[dir], interval);
+    stopScrolling();
+    scrollInterval.current = setInterval(() => {
+      if (dir === "left") { setHIndex((prev) => (prev - 1 + horizontalCount) % horizontalCount); setLastMoveDir("x"); }
+      else if (dir === "right") { setHIndex((prev) => (prev + 1) % horizontalCount); setLastMoveDir("x"); }
+      else if (dir === "up") { setVIndex((prev) => (prev - 1 + verticalCount) % verticalCount); setLastMoveDir("y"); }
+      else if (dir === "down") { setVIndex((prev) => (prev + 1) % verticalCount); setLastMoveDir("y"); }
+      setShowHint(false);
+    }, 30);
   };
 
-  const stopScrolling = (dir) => {
-    clearInterval(scrollIntervals.current[dir]);
+  const stopScrolling = () => {
+    if (scrollInterval.current) clearInterval(scrollInterval.current);
+    scrollInterval.current = null;
   };
 
   const hPath = (i) => `/images/horizontal/${hBase}${pad(i)}.${fileExt}`;
   const vPath = (i) => `/images/vertical/${resolvedVBase}${pad(i)}.${fileExt}`;
   const currentSrc = lastMoveDir === "x" ? hPath(hIndex) : vPath(vIndex);
 
+  const arrowStyle = (dir) => {
+    const baseSize = window.innerWidth < 768 ? 50 : 32;
+    return {
+      position: "absolute",
+      fontSize: baseSize,
+      padding: "10px",
+      color: "#fff",
+      background: "rgba(0,0,0,0.4)",
+      border: "none",
+      borderRadius: 5,
+      cursor: "pointer",
+      zIndex: 10,
+      userSelect: "none",
+      top: dir === "up" ? 10 : dir === "down" ? "auto" : "50%",
+      bottom: dir === "down" ? 10 : "auto",
+      left: dir === "left" ? 10 : dir === "right" ? "auto" : "50%",
+      right: dir === "right" ? 10 : "auto",
+      transform: "none",
+    };
+  };
+
   return (
     <div
       ref={containerRef}
       style={{
-        width,
-        height,
+        width: "100%",
+        maxWidth: width,
+        aspectRatio: "1/1",
         border: "1px solid #ddd",
         touchAction: "none",
         userSelect: "none",
@@ -221,7 +186,8 @@ export default function TwoAxisViewer({
         position: "relative",
         cursor: "grab",
       }}
-      tabIndex={0}
+      onClick={stopScrolling}
+      onTouchStart={stopScrolling}
     >
       <img
         src={currentSrc}
@@ -236,69 +202,20 @@ export default function TwoAxisViewer({
         draggable={false}
       />
 
-      {/* Hint Overlay */}
-      {showHint && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 40,
-            color: "rgba(0,0,0,0.5)",
-            pointerEvents: "none",
-          }}
-        >
-          ⬅️ ➡️ ⬆️ ⬇️
-        </div>
-      )}
+      {showHint && <div style={{
+        position: "absolute", inset: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 40, color: "rgba(0,0,0,0.5)", pointerEvents: "none"
+      }}>⬅️ ➡️ ⬆️ ⬇️</div>}
 
-      {/* Scroll Buttons */}
-      {["left", "right", "up", "down"].map((dir) => (
+      {["left","right","up","down"].map(dir => (
         <button
           key={dir}
-          onMouseDown={() => {
-            setShowHint(false);
-            startScrolling(dir);
-          }}
-          onMouseUp={() => stopScrolling(dir)}
-          onMouseLeave={() => stopScrolling(dir)}
-          style={{
-            position: "absolute",
-            [dir === "left"
-              ? "left"
-              : dir === "right"
-              ? "right"
-              : "50%"]: 10,
-            top:
-              dir === "up"
-                ? 10
-                : dir === "down"
-                ? "auto"
-                : "calc(50% - 20px)",
-            bottom: dir === "down" ? 10 : "auto",
-            transform:
-              dir === "up" || dir === "down"
-                ? "translateX(-50%)"
-                : "none",
-            fontSize: 24,
-            padding: "10px 15px",
-            background: "#fff",
-            border: "1px solid #ccc",
-            borderRadius: 5,
-            cursor: "pointer",
-            zIndex: 10,
-            userSelect: "none",
-          }}
+          onMouseDown={(e) => { e.stopPropagation(); startScrolling(dir); }}
+          onTouchStart={(e) => { e.stopPropagation(); startScrolling(dir); }}
+          style={arrowStyle(dir)}
         >
-          {dir === "left"
-            ? "←"
-            : dir === "right"
-            ? "→"
-            : dir === "up"
-            ? "↑"
-            : "↓"}
+          {dir === "left" ? "←" : dir === "right" ? "→" : dir === "up" ? "↑" : "↓"}
         </button>
       ))}
     </div>
