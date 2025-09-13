@@ -1,7 +1,6 @@
 "use client";
 import React, { useEffect, useRef, useState, useCallback } from "react";
 
-// Pad function to create file name with leading zeros (e.g., 00001)
 function pad(n, len = 5) {
   return String(n).padStart(len, "0");
 }
@@ -12,7 +11,7 @@ export default function TwoAxisViewer({
   hBase = "Watch-Horizontal.",
   vCandidates = ["Watch-Vertical.", "Watch-Verital."],
   fileExt = "png",
-  sensitivity = 20,
+  sensitivity = 6,
   width = 600,
   height = 600,
 }) {
@@ -28,10 +27,9 @@ export default function TwoAxisViewer({
   const accY = useRef(0);
   const lastPointer = useRef({ x: 0, y: 0 });
 
-  // Resolve correct vertical base (in case of naming error like Verital)
+  // detect vertical base (Vertical vs Verital)
   useEffect(() => {
     let mounted = true;
-
     const tryOne = (base, cb) => {
       const img = new Image();
       img.onload = () => mounted && cb(true);
@@ -40,11 +38,11 @@ export default function TwoAxisViewer({
     };
 
     tryOne(vCandidates[0], (ok) => {
-      if (ok) {
-        setResolvedVBase(vCandidates[0]);
-      } else if (vCandidates[1]) {
+      if (ok) setResolvedVBase(vCandidates[0]);
+      else if (vCandidates[1]) {
         tryOne(vCandidates[1], (ok2) => {
-          setResolvedVBase(ok2 ? vCandidates[1] : vCandidates[0]);
+          if (ok2) setResolvedVBase(vCandidates[1]);
+          else setResolvedVBase(vCandidates[0]);
         });
       }
     });
@@ -54,7 +52,7 @@ export default function TwoAxisViewer({
     };
   }, [vCandidates, fileExt]);
 
-  // Preload current frame
+  // preload current frame
   useEffect(() => {
     const img = new Image();
     img.src =
@@ -63,7 +61,7 @@ export default function TwoAxisViewer({
         : `/images/vertical/${resolvedVBase}${pad(vIndex)}.${fileExt}`;
   }, [hIndex, vIndex, lastMoveDir, resolvedVBase, hBase, fileExt]);
 
-  // Pointer handlers
+  // pointer handlers
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -86,7 +84,7 @@ export default function TwoAxisViewer({
 
       if (Math.abs(accX.current) >= sensitivity) {
         const steps = Math.floor(Math.abs(accX.current) / sensitivity);
-        const dir = accX.current > 0 ? -1 : 1;
+        const dir = accX.current > 0 ? 1 : -1;
         setHIndex(
           (prev) => (prev + dir * steps + horizontalCount) % horizontalCount
         );
@@ -105,7 +103,7 @@ export default function TwoAxisViewer({
       }
 
       lastPointer.current = { x: e.clientX, y: e.clientY };
-      setShowHint(false);
+      setShowHint(false); // hide arrows after first drag
     };
 
     const onPointerUp = (e) => {
@@ -129,7 +127,7 @@ export default function TwoAxisViewer({
     };
   }, [horizontalCount, verticalCount, sensitivity, resolvedVBase]);
 
-  // Keyboard arrow navigation
+  // keyboard support
   const handleKey = useCallback(
     (e) => {
       setShowHint(false);
@@ -155,7 +153,7 @@ export default function TwoAxisViewer({
     return () => window.removeEventListener("keydown", handleKey);
   }, [handleKey]);
 
-  // Auto-shift on load to show interaction is possible
+  // auto-move once on load
   useEffect(() => {
     const timer = setTimeout(() => {
       setHIndex((prev) => (prev + 5) % horizontalCount);
@@ -185,15 +183,11 @@ export default function TwoAxisViewer({
         position: "relative",
         cursor: "grab",
       }}
-      tabIndex={0} // Needed for keyboard events
+      tabIndex={0} // 👈 keyboard ke liye focusable
     >
       <img
         src={currentSrc}
         alt="360 viewer"
-        onError={(e) => {
-          e.target.onerror = null; // Prevent infinite loop
-          e.target.src = "/images/fallback.png";
-        }}
         style={{
           maxWidth: "100%",
           maxHeight: "100%",
@@ -204,7 +198,7 @@ export default function TwoAxisViewer({
         draggable={false}
       />
 
-      {/* Hint overlay on first load */}
+      {/* Hint Overlay Arrows (only once) */}
       {showHint && (
         <div
           style={{
@@ -213,16 +207,12 @@ export default function TwoAxisViewer({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: 28,
-            color: "rgba(0, 0, 0, 0.6)",
-            background: "rgba(255, 255, 255, 0.7)",
-            textAlign: "center",
+            fontSize: 40,
+            color: "rgba(0,0,0,0.5)",
             pointerEvents: "none",
-            padding: 20,
-            fontWeight: "bold",
           }}
         >
-          Drag to Rotate<br />or Use Arrow Keys
+          ⬅️ ➡️ ⬆️ ⬇️
         </div>
       )}
     </div>
