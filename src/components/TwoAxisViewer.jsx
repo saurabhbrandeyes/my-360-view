@@ -16,56 +16,54 @@ export default function TwoAxisViewer({
   const [hIndex, setHIndex] = useState(0);
   const [vIndex, setVIndex] = useState(0);
   const [lastMoveDir, setLastMoveDir] = useState("x");
-  const [resolvedVBase, setResolvedVBase] = useState(vCandidates[0]);
+  const [resolvedVBase, setResolvedVBase] = useState(null);
   const [showHint, setShowHint] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
-  const [activeArrow, setActiveArrow] = useState(null); // currently moving arrow
+  const [activeArrow, setActiveArrow] = useState(null);
+  const [animateArrow, setAnimateArrow] = useState(true);
 
   const scrollInterval = useRef(null);
 
-  // Detect mobile
-  useEffect(() => {
-    setIsMobile(window.innerWidth < 768);
-  }, []);
+  useEffect(() => { setIsMobile(window.innerWidth < 768); }, []);
 
-  // Detect vertical base
   useEffect(() => {
     let mounted = true;
-    const tryOne = (base, cb) => {
+    const tryBase = async (base) => {
       const img = new Image();
-      img.onload = () => mounted && cb(true);
-      img.onerror = () => mounted && cb(false);
-      img.src = `/images/vertical/${base}${pad(0)}.${fileExt}`;
+      return new Promise((resolve) => {
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = `/images/vertical/${base}${pad(0)}.${fileExt}`;
+      });
     };
-    tryOne(vCandidates[0], (ok) => {
-      if (ok) setResolvedVBase(vCandidates[0]);
-      else if (vCandidates[1]) {
-        tryOne(vCandidates[1], (ok2) => {
-          if (ok2) setResolvedVBase(vCandidates[1]);
-          else setResolvedVBase(vCandidates[0]);
-        });
+    const resolveVertical = async () => {
+      for (let base of vCandidates) {
+        const exists = await tryBase(base);
+        if (exists && mounted) { setResolvedVBase(base); return; }
       }
-    });
+      if (mounted) setResolvedVBase(vCandidates[0]);
+    };
+    resolveVertical();
     return () => { mounted = false; };
   }, [vCandidates, fileExt]);
 
-  // Preload frames
   const preloadNextFrames = (direction, base, index, count) => {
-    for (let i = 1; i <= 2; i++) {
+    for (let i = 1; i <= 3; i++) {
       const idx = (index + i) % count;
       const img = new Image();
       img.src = `/images/${direction}/${base}${pad(idx)}.${fileExt}`;
     }
   };
   useEffect(() => {
+    if (!resolvedVBase) return;
     lastMoveDir === "x"
       ? preloadNextFrames("horizontal", hBase, hIndex, horizontalCount)
       : preloadNextFrames("vertical", resolvedVBase, vIndex, verticalCount);
   }, [hIndex, vIndex, lastMoveDir, hBase, resolvedVBase]);
 
-  // Keyboard support (optional)
   const handleKey = useCallback((e) => {
     setShowHint(false);
+    setAnimateArrow(false);
     if (e.key === "ArrowRight") { setHIndex((prev) => (prev + 1) % horizontalCount); setLastMoveDir("x"); }
     else if (e.key === "ArrowLeft") { setHIndex((prev) => (prev - 1 + horizontalCount) % horizontalCount); setLastMoveDir("x"); }
     else if (e.key === "ArrowUp") { setVIndex((prev) => (prev - 1 + verticalCount) % verticalCount); setLastMoveDir("y"); }
@@ -73,10 +71,10 @@ export default function TwoAxisViewer({
   }, [horizontalCount, verticalCount]);
   useEffect(() => { window.addEventListener("keydown", handleKey); return () => window.removeEventListener("keydown", handleKey); }, [handleKey]);
 
-  // Scroll buttons logic
   const startScrolling = (dir) => {
     stopScrolling();
-    setActiveArrow(dir); // set the moving arrow
+    setActiveArrow(dir);
+    setAnimateArrow(false);
     scrollInterval.current = setInterval(() => {
       if (dir === "left") { setHIndex((prev) => (prev - 1 + horizontalCount) % horizontalCount); setLastMoveDir("x"); }
       else if (dir === "right") { setHIndex((prev) => (prev + 1) % horizontalCount); setLastMoveDir("x"); }
@@ -89,7 +87,7 @@ export default function TwoAxisViewer({
   const stopScrolling = () => {
     if (scrollInterval.current) clearInterval(scrollInterval.current);
     scrollInterval.current = null;
-    setActiveArrow(null); // reset active arrow
+    setActiveArrow(null);
   };
 
   const hPath = (i) => `/images/horizontal/${hBase}${pad(i)}.${fileExt}`;
@@ -97,29 +95,49 @@ export default function TwoAxisViewer({
   const currentSrc = lastMoveDir === "x" ? hPath(hIndex) : vPath(vIndex);
 
   const arrowStyle = (dir) => {
-    const size = isMobile ? 50 : 32;
-    return {
-      position: "absolute",
-      fontSize: size,
-      padding: "10px",
-      color: "#fff",
-      background: "rgba(0,0,0,0.4)",
-      border: "none",
-      borderRadius: 5,
-      cursor: "pointer",
-      zIndex: 10,
-      userSelect: "none",
-      WebkitUserSelect: "none",
-      touchAction: "none",
-      WebkitTapHighlightColor: "transparent",
-      top: dir === "up" ? 10 : dir === "down" ? "auto" : "50%",
-      bottom: dir === "down" ? 10 : "auto",
-      left: dir === "left" ? 10 : dir === "right" ? "auto" : "50%",
-      right: dir === "right" ? 10 : "auto",
-      transform: "none",
-      display: activeArrow && activeArrow !== dir ? "none" : "block", // only show active arrow
-    };
+  let size = isMobile ? 35 : 28;
+  let edgeOffset = 8; // distance from edge
+
+  // default
+  let transform = "translate(-50%, -50%)";
+
+  // Adjust per direction
+  if (dir === "left") transform = "translate(0, -50%)";    // left edge vertically centered
+  if (dir === "right") transform = "translate(0, -50%)";   // right edge vertically centered
+  if (dir === "up") transform = "translate(-50%, 0)";      // top edge horizontally centered
+  if (dir === "down") transform = "translate(-50%, 0)";    // bottom edge horizontally centered
+
+  return {
+    position: "absolute",
+    width: size,
+    height: size,
+    fontSize: size * 0.6,
+    display: activeArrow && activeArrow !== dir ? "none" : "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#fff",
+    background: "linear-gradient(135deg,#1a73e8,#4285f4)",
+    border: "none",
+    borderRadius: "50%",
+    cursor: "pointer",
+    zIndex: 10,
+    userSelect: "none",
+    WebkitUserSelect: "none",
+    touchAction: "none",
+    WebkitTapHighlightColor: "transparent",
+    top: dir === "up" ? edgeOffset : dir === "down" ? "auto" : "50%",
+    bottom: dir === "down" ? edgeOffset : "auto",
+    left: dir === "left" ? edgeOffset : dir === "right" ? "auto" : "50%",
+    right: dir === "right" ? edgeOffset : "auto",
+    transform: transform,
+    transition: "all 0.2s ease",
+    animation: animateArrow && !activeArrow ? "pulse 1.2s infinite" : "none",
+    boxShadow: "0 4px 8px rgba(0,0,0,0.3)",
+    zIndex: 20,
   };
+};
+
+
 
   return (
     <div
@@ -127,11 +145,11 @@ export default function TwoAxisViewer({
         width: "100%",
         maxWidth: width,
         aspectRatio: "1/1",
-        border: activeArrow ? "none" : "1px solid #ddd", // hide border while moving
+        border: activeArrow ? "none" : "1px solid #ddd",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "#f8f8f8",
+        background: "#000",
         overflow: "hidden",
         position: "relative",
       }}
@@ -147,7 +165,7 @@ export default function TwoAxisViewer({
           objectFit: "contain",
           pointerEvents: "none",
           userSelect: "none",
-          transform: activeArrow && isMobile ? "scale(1.1)" : "scale(1)", // zoom slightly on mobile when moving
+          transform: activeArrow && isMobile ? "scale(1.1)" : "scale(1)",
           transition: "transform 0.2s ease",
         }}
         draggable={false}
@@ -162,7 +180,7 @@ export default function TwoAxisViewer({
             alignItems: "center",
             justifyContent: "center",
             fontSize: 40,
-            color: "rgba(0,0,0,0.5)",
+            color: "rgba(255,255,255,0.5)",
             pointerEvents: "none",
           }}
         >
@@ -180,6 +198,14 @@ export default function TwoAxisViewer({
           {dir === "left" ? "←" : dir === "right" ? "→" : dir === "up" ? "↑" : "↓"}
         </button>
       ))}
+
+      <style jsx>{`
+        @keyframes pulse {
+          0% { transform: translate(-50%, -50%) scale(1); }
+          50% { transform: translate(-50%, -50%) scale(1.2); }
+          100% { transform: translate(-50%, -50%) scale(1); }
+        }
+      `}</style>
     </div>
   );
 }
