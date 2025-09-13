@@ -62,7 +62,7 @@ export default function TwoAxisViewer({
       : preloadNextFrames("vertical", resolvedVBase, vIndex, verticalCount);
   }, [hIndex, vIndex, lastMoveDir, hBase, resolvedVBase]);
 
-  // Pointer drag
+  // Pointer & drag
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -72,7 +72,6 @@ export default function TwoAxisViewer({
       el.style.cursor = "grabbing";
       lastPointer.current = { x: e.clientX, y: e.clientY };
       try { el.setPointerCapture(e.pointerId); } catch {}
-      stopScrolling();
     };
     const onPointerMove = (e) => {
       if (!draggingRef.current) return;
@@ -98,6 +97,7 @@ export default function TwoAxisViewer({
 
       lastPointer.current = { x: e.clientX, y: e.clientY };
       setShowHint(false);
+      stopScrolling(); // stop arrow scroll on drag
     };
     const onPointerUp = () => {
       draggingRef.current = false;
@@ -109,6 +109,7 @@ export default function TwoAxisViewer({
     el.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
+
     return () => {
       el.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
@@ -126,9 +127,9 @@ export default function TwoAxisViewer({
   }, [horizontalCount, verticalCount]);
   useEffect(() => { window.addEventListener("keydown", handleKey); return () => window.removeEventListener("keydown", handleKey); }, [handleKey]);
 
-  // Scroll buttons logic
+  // Arrow scrolling
   const startScrolling = (dir) => {
-    stopScrolling();
+    stopScrolling(); // stop previous
     scrollInterval.current = setInterval(() => {
       if (dir === "left") { setHIndex((prev) => (prev - 1 + horizontalCount) % horizontalCount); setLastMoveDir("x"); }
       else if (dir === "right") { setHIndex((prev) => (prev + 1) % horizontalCount); setLastMoveDir("x"); }
@@ -137,11 +138,7 @@ export default function TwoAxisViewer({
       setShowHint(false);
     }, 30);
   };
-
-  const stopScrolling = () => {
-    if (scrollInterval.current) clearInterval(scrollInterval.current);
-    scrollInterval.current = null;
-  };
+  const stopScrolling = () => { if (scrollInterval.current) clearInterval(scrollInterval.current); scrollInterval.current = null; };
 
   const hPath = (i) => `/images/horizontal/${hBase}${pad(i)}.${fileExt}`;
   const vPath = (i) => `/images/vertical/${resolvedVBase}${pad(i)}.${fileExt}`;
@@ -186,7 +183,8 @@ export default function TwoAxisViewer({
         position: "relative",
         cursor: "grab",
       }}
-      onClick={stopScrolling}
+      tabIndex={0}
+      onClick={stopScrolling} // stop scroll if anywhere clicked
       onTouchStart={stopScrolling}
     >
       <img
@@ -209,12 +207,7 @@ export default function TwoAxisViewer({
       }}>⬅️ ➡️ ⬆️ ⬇️</div>}
 
       {["left","right","up","down"].map(dir => (
-        <button
-          key={dir}
-          onMouseDown={(e) => { e.stopPropagation(); startScrolling(dir); }}
-          onTouchStart={(e) => { e.stopPropagation(); startScrolling(dir); }}
-          style={arrowStyle(dir)}
-        >
+        <button key={dir} onMouseDown={() => startScrolling(dir)} style={arrowStyle(dir)}>
           {dir === "left" ? "←" : dir === "right" ? "→" : dir === "up" ? "↑" : "↓"}
         </button>
       ))}
