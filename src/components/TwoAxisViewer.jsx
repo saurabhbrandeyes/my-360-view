@@ -11,7 +11,7 @@ export default function TwoAxisViewer({
   hBase = "Watch-Horizontal.",
   vCandidates = ["Watch-Vertical.", "Watch-Verital."],
   fileExt = "png",
-  sensitivity = 6,
+  sensitivity = 25,
   width = 600,
   height = 600,
 }) {
@@ -84,7 +84,7 @@ export default function TwoAxisViewer({
 
       if (Math.abs(accX.current) >= sensitivity) {
         const steps = Math.floor(Math.abs(accX.current) / sensitivity);
-        const dir = accX.current > 0 ? 1 : -1;
+        const dir = accX.current > 0 ? -1 : 1;
         setHIndex(
           (prev) => (prev + dir * steps + horizontalCount) % horizontalCount
         );
