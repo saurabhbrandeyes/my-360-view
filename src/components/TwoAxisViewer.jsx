@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useRef, useState, useCallback } from "react";
 
+// Pad function to create file name with leading zeros (e.g., 00001)
 function pad(n, len = 5) {
   return String(n).padStart(len, "0");
 }
@@ -11,7 +12,7 @@ export default function TwoAxisViewer({
   hBase = "Watch-Horizontal.",
   vCandidates = ["Watch-Vertical.", "Watch-Verital."],
   fileExt = "png",
-  sensitivity = 25,
+  sensitivity = 20,
   width = 600,
   height = 600,
 }) {
@@ -27,9 +28,10 @@ export default function TwoAxisViewer({
   const accY = useRef(0);
   const lastPointer = useRef({ x: 0, y: 0 });
 
-  // detect vertical base (Vertical vs Verital)
+  // Resolve correct vertical base (in case of naming error like Verital)
   useEffect(() => {
     let mounted = true;
+
     const tryOne = (base, cb) => {
       const img = new Image();
       img.onload = () => mounted && cb(true);
@@ -38,11 +40,11 @@ export default function TwoAxisViewer({
     };
 
     tryOne(vCandidates[0], (ok) => {
-      if (ok) setResolvedVBase(vCandidates[0]);
-      else if (vCandidates[1]) {
+      if (ok) {
+        setResolvedVBase(vCandidates[0]);
+      } else if (vCandidates[1]) {
         tryOne(vCandidates[1], (ok2) => {
-          if (ok2) setResolvedVBase(vCandidates[1]);
-          else setResolvedVBase(vCandidates[0]);
+          setResolvedVBase(ok2 ? vCandidates[1] : vCandidates[0]);
         });
       }
     });
@@ -52,7 +54,7 @@ export default function TwoAxisViewer({
     };
   }, [vCandidates, fileExt]);
 
-  // preload current frame
+  // Preload current frame
   useEffect(() => {
     const img = new Image();
     img.src =
@@ -61,7 +63,7 @@ export default function TwoAxisViewer({
         : `/images/vertical/${resolvedVBase}${pad(vIndex)}.${fileExt}`;
   }, [hIndex, vIndex, lastMoveDir, resolvedVBase, hBase, fileExt]);
 
-  // pointer handlers
+  // Pointer handlers
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -103,7 +105,7 @@ export default function TwoAxisViewer({
       }
 
       lastPointer.current = { x: e.clientX, y: e.clientY };
-      setShowHint(false); // hide arrows after first drag
+      setShowHint(false);
     };
 
     const onPointerUp = (e) => {
@@ -127,7 +129,7 @@ export default function TwoAxisViewer({
     };
   }, [horizontalCount, verticalCount, sensitivity, resolvedVBase]);
 
-  // keyboard support
+  // Keyboard arrow navigation
   const handleKey = useCallback(
     (e) => {
       setShowHint(false);
@@ -153,7 +155,7 @@ export default function TwoAxisViewer({
     return () => window.removeEventListener("keydown", handleKey);
   }, [handleKey]);
 
-  // auto-move once on load
+  // Auto-shift on load to show interaction is possible
   useEffect(() => {
     const timer = setTimeout(() => {
       setHIndex((prev) => (prev + 5) % horizontalCount);
@@ -183,11 +185,15 @@ export default function TwoAxisViewer({
         position: "relative",
         cursor: "grab",
       }}
-      tabIndex={0} // 👈 keyboard ke liye focusable
+      tabIndex={0} // Needed for keyboard events
     >
       <img
         src={currentSrc}
         alt="360 viewer"
+        onError={(e) => {
+          e.target.onerror = null; // Prevent infinite loop
+          e.target.src = "/images/fallback.png";
+        }}
         style={{
           maxWidth: "100%",
           maxHeight: "100%",
@@ -198,7 +204,7 @@ export default function TwoAxisViewer({
         draggable={false}
       />
 
-      {/* Hint Overlay Arrows (only once) */}
+      {/* Hint overlay on first load */}
       {showHint && (
         <div
           style={{
@@ -207,12 +213,16 @@ export default function TwoAxisViewer({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: 40,
-            color: "rgba(0,0,0,0.5)",
+            fontSize: 28,
+            color: "rgba(0, 0, 0, 0.6)",
+            background: "rgba(255, 255, 255, 0.7)",
+            textAlign: "center",
             pointerEvents: "none",
+            padding: 20,
+            fontWeight: "bold",
           }}
         >
-          ⬅️ ➡️ ⬆️ ⬇️
+          Drag to Rotate<br />or Use Arrow Keys
         </div>
       )}
     </div>
