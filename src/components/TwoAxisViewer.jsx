@@ -32,7 +32,7 @@ export default function TwoAxisViewer({
   const velocityY = useRef(0);
   const momentumFrame = useRef(null);
 
-  const sensitivity = 0.5;
+  const sensitivity = 0.2;
   const momentumFactor = 0.92;
   const snapThreshold = 0.5;
 
